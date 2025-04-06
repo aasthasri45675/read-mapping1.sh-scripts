@@ -1,0 +1,189 @@
+#!/bin/bash
+# Load BWA module
+# Load SAMtools module
+# Create and enter a new directory for read mapping1
+# Print start message to stdout
+echo "Job started on $(date)" 
+
+
+# load required bioinformatics modules
+echo "loading BWA module..."
+module load bwa/0.7.17 #Load BWA for sequence alignment
+echo "Loading Samtools module..."
+module load samtools/1.21 # Load Samtools for handling sequence data
+
+# Verify that BWA and Samtools are avaiable
+echo "checking BWA installation..." 
+bwa
+
+echo "Checking Samtools installation... "
+samtools
+
+# List avaiable datasets in the shared directory
+echo "Listing avaiable datasets..."
+ls /gpfs/data/BIO-DSB/Session5/datasets/
+
+# Print current working directory
+echo "Current working directory... "
+pwd
+
+# Create a directory for read mapping
+echo "Creating directory for read mapping..."
+mkdir read-mapping1
+cd read-mapping1
+
+# Copy FASTQ files for read mapping
+echo "Copying dataset files..."
+cp /gpfs/data/BIO-DSB/Session5/datasets/datasetG_1.fastq.gz ./
+cp /gpfs/data/BIO-DSB/Session5/datasets/datasetG_2.fastq.gz ./
+
+# Verify copied files
+echo "Verifying copied files..."
+ls -lrth # List files with details, sorted by modification time
+
+# view contents of one FASTQ file to verify integrity
+echo "Displaying contents of the datasetG_1.fastq.gz..."
+zless datasetG_1.fastq.gz  # view compressed FASTQ file without extracting
+
+# view contents of one FASTQ file to verify integrity
+echo "Displaying contents of the datasetG_2.fastq.gz..."
+zless datasetG_2.fastq.gz  # view compressed FASTQ file without extracting
+
+# view the first few lines of the first FASTQ file
+echo "Displaying first few lines of datasetG_1.fastq.gz..."
+zcat datasetG_1.fastq.gz | head  # Decompress and show the first few lines
+
+# view the first few lines of the Second FASTQ file
+echo "Displaying first few lines of datasetG_2.fastq.gz..."
+zcat datasetG_2.fastq.gz | head  # Decompress and show the first few lines
+
+# check the number of lines in both FASTQ files
+echo "Counting lines in datasetG_1.fastq.gz..."
+zcat datasetG_1.fastq.gz | wc -l # Get the number of lines (reads) in the first dataset
+echo "Counting lines in datasetG_2.fastq.gz..."
+zcat datasetG_2.fastq.gz | wc -l # Get the number of lines (reads) in the second dataset
+
+# Inspect the refernce genome (GRCh38) file 
+echo "Displaying first few lines of the reference genome GRCh38..."
+head /gpfs/data/BIO-DSB/Session5/ref/human-ref-GRCh38.fasta # Preview the first part of the refernce genome file
+
+# Define the path to the reference genome FASTA file
+FASTA_FILE="/gpfs/data/BIO-DSB/Session5/ref/human-ref-GRCh38.fasta"
+
+# Check if the FASTA file exists before proceeding
+if [ ! -f "$FASTA_FILE" ]; then
+    echo "Error: FASTA file not found at $FASTA_FILE"
+    exit 1
+fi
+
+# Count the number of sequences (headers) in the FASTA file
+echo "Counting the number of sequences in the FASTA file..."
+NUM_SEQUENCES=$(grep -c "^>" "$FASTA_FILE")
+echo "Total number of sequences: $NUM_SEQUENCES"
+
+# Extract and display all sequence headers (lines starting with ">") from the FASTA file
+echo "Extracting sequence headers from the FASTA file..."
+grep "^>" "$FASTA_FILE"
+
+# List the contents of the reference directory
+echo "Listing reference directory contents..."
+ls -ltrh /gpfs/data/BIO-DSB/Session5/ref/ # check the contents and sizes of the files in the reference directory
+
+# Copy the SLURM submission script for job submission
+echo "Copying SLURM submission script..."
+cp /gpfs/data/BIO-DSB/Session5/Example_SLURM_submission_script.sh ./Example_SLURM_submission_script.sh # Copy the example SLURM script
+
+# Check the files in the current working directory
+echo "Listing files in the current directory..."
+ls # List the files to verify the current working directory
+
+# Edit the SLURM script(using nano editor) to customize it
+echo "Editing SLURM submission script..."
+nano Example_SLURM_submission_script.sh # Open SLURM script for editing
+#!/bin/bash -e
+
+#SBATCH --qos=bio-ds                  # User group
+#SBATCH -p bio-ds                     # Job queue (partition)
+#SBATCH -N 1                          # number of nodes
+#SBATCH -n 1                          # number of processes
+#SBATCH -c 1                          # number of cores
+#SBATCH --mem 10GB                    # memory pool for all cores
+#SBATCH -t 0-00:10                    # wall time (D-HH:MM)
+#SBATCH -o %x_%j_%N.STDOUT            # STDOUT
+#SBATCH -e %x_%j_%N.STDERR            # STDERR
+#SBATCH -J example                    # job name
+# #SBATCH --mail-type=END,FAIL          # notifications for job done & fail
+# #SBATCH --mail-user=A.shrivastava@uea.ac.uk # send-to address
+
+#put your command here:
+module load bwa/0.7.17
+module load samtools/1.10
+
+#print job start time
+echo "Job started at $(date)"
+
+bwa mem /gpfs/data/BIO-DSB/Session5/ref/human-ref-GRCh38.fasta ~/read-mapping1/datasetG_1.fastq.gz ~/read-mapping1/datasetG_2.fastq.gz  > alignment.sam
+
+echo "Job completed at $(date)"
+# Submit the SLURM job
+echo "Submitting the SLURM job..."
+sbatch Example_SLURM_submission_script.sh # Submit the job for alignment
+
+# Check the job status
+echo "Checking job status..."
+sacct # Check the status of all jobs
+
+# Check jobs in the queue for a specific user
+echo "Checking user jobs in the Queue..."                                                                                                                                                                                                                                                                                         
+squeue -u ekk25vyu # List all jobs running for the user
+
+# Check for error in the job (stderr)
+echo "Viewing the SLURM error log (STDERR)..."
+less example_20229309_c0120.STDERR # Check the job's error output
+
+# Sort and view the SAM file
+echo "Viewing the alignment SAM file... "
+less -S alignment.sam # View the SAM alignment file with wrapped text
+
+# Convert the SAM file to bAM format and sort it
+echo "Sorting the BAM file..."
+samtools sort alignment.bam -o alignment_sorted.bam # Sort the BAM file
+
+# View the sorted BAM file
+echo "Viewing the sorted BAM file..."
+samtools view -h alignment_sorted.bam | less -S # View sorted BAM file human-readable format
+
+# Index the sorted BAM file
+echo "Indexing the sorted BAM file..."
+samtools index alignment_sorted.bam # Index the sorted BAM file
+
+# List the BAM file index (.bai) to conform it's created
+echo "Listing BAM file index..."
+ls -l alignment_sorted.bam.bai # Verify the index file has been created
+
+# Perform index stats on the sorted BAM file
+echo "Getting index stats from the sorted BAM file..."
+samtools idxstats alignment_sorted.bam  # Display statistics for each reference sequence 
+
+# Check the flag stats of the sorted BAM file
+echo "Getting flag statistics from the sorted BAM file..."
+samtools flagstat alignment_sorted.bam # Display statisticson read alignments
+
+# Run coverage analysis on the sorted BAM file
+echo "performing coverage analysis on the BAM file..."
+samtools coverage alignment_sorted.bam > coverage_output.txt # Compute the coverage stats
+
+# Display the coverage output in a formatted table
+echo "Displaying coverage output..."
+column -t coverage_output.txt | less # View the coverage output in a human-raedable table
+
+# Sort the coverage data by coverage value (in descending order)
+echo "Viewing sorted coverage output..."
+sort -k5,5nr coverage_output.txt > sorted_coverage.txt # Sort the coverage data by the coverage column
+
+# View the sorted coverage data
+echo "Viewing sorted coverage output..."
+less sorted_coverage.txt # Check the sorted coverage data
+
+
+
